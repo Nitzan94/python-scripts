@@ -513,19 +513,42 @@ def script_generator_ui():
     st.header("🤖 Script Generator")
     st.markdown("Generate new utility scripts using Claude Agent SDK")
 
-    # Check API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        st.error("⚠️ ANTHROPIC_API_KEY not set")
-        st.info("""
-        To use the script generator:
-        1. Get API key from https://console.anthropic.com/
-        2. Create `.env` file in project root
-        3. Add: `ANTHROPIC_API_KEY=your_key_here`
-        4. Restart Streamlit app
-        """)
-        return
+    # API Key management
+    api_key_from_env = os.getenv("ANTHROPIC_API_KEY")
 
-    st.success("✅ Agent SDK ready")
+    # Initialize session state for API key
+    if 'api_key' not in st.session_state:
+        st.session_state['api_key'] = api_key_from_env or ""
+
+    # Show API key input if not in environment
+    if not api_key_from_env:
+        with st.expander("🔑 API Key Configuration", expanded=True):
+            st.info("Get your API key from [Anthropic Console](https://console.anthropic.com/settings/keys)")
+
+            api_key_input = st.text_input(
+                "Enter your Anthropic API Key:",
+                type="password",
+                value=st.session_state['api_key'],
+                placeholder="sk-ant-..."
+            )
+
+            if api_key_input != st.session_state['api_key']:
+                st.session_state['api_key'] = api_key_input
+
+            if not st.session_state['api_key']:
+                st.warning("⚠️ Please enter your API key to use the Script Generator")
+                st.info("""
+                **Alternative:** Set in `.env` file:
+                1. Copy `.env.example` to `.env`
+                2. Add: `ANTHROPIC_API_KEY=your_key_here`
+                3. Restart Streamlit app
+                """)
+                return
+            else:
+                st.success("✅ API key entered (stored in session only)")
+    else:
+        st.success("✅ API key loaded from environment")
+        st.session_state['api_key'] = api_key_from_env
 
     # Description input
     st.subheader("Describe Your Script")
@@ -549,6 +572,9 @@ def script_generator_ui():
             try:
                 from script_generator import generate_script, get_example_scripts
 
+                # Set API key in environment for this request
+                os.environ['ANTHROPIC_API_KEY'] = st.session_state['api_key']
+
                 # Get examples if requested
                 examples = get_example_scripts(2) if use_examples else None
 
@@ -562,7 +588,7 @@ def script_generator_ui():
 
             except Exception as e:
                 st.error(f"Generation failed: {e}")
-                st.info("Check that ANTHROPIC_API_KEY is valid and you have API credits")
+                st.info("Check that your API key is valid and you have API credits")
                 return
 
     # Show preview if script generated
