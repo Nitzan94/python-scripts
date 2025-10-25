@@ -5,6 +5,10 @@ import streamlit as st
 import tempfile
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Import script functions
 import sys
@@ -27,11 +31,15 @@ def main():
     st.sidebar.title("Navigation")
     category = st.sidebar.radio(
         "Select Category:",
-        ["Content Tools", "File Tools", "Web Tools", "Data Tools"]
+        ["Script Generator", "Content Tools", "File Tools", "Web Tools", "Data Tools"]
     )
 
+    # Script Generator
+    if category == "Script Generator":
+        script_generator_ui()
+
     # Content Tools
-    if category == "Content Tools":
+    elif category == "Content Tools":
         tool = st.sidebar.selectbox(
             "Select Tool:",
             [
@@ -499,6 +507,143 @@ def meeting_notes_ui():
 
     if st.button("Start Recording"):
         st.info("Recording... (This feature works better in the CLI version)")
+
+
+def script_generator_ui():
+    st.header("🤖 Script Generator")
+    st.markdown("Generate new utility scripts using Claude Agent SDK")
+
+    # Check API key
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        st.error("⚠️ ANTHROPIC_API_KEY not set")
+        st.info("""
+        To use the script generator:
+        1. Get API key from https://console.anthropic.com/
+        2. Create `.env` file in project root
+        3. Add: `ANTHROPIC_API_KEY=your_key_here`
+        4. Restart Streamlit app
+        """)
+        return
+
+    st.success("✅ Agent SDK ready")
+
+    # Description input
+    st.subheader("Describe Your Script")
+    description = st.text_area(
+        "What should the script do?",
+        placeholder="Example: Create a script that converts CSV files to Excel with formatting and charts",
+        height=150
+    )
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        use_examples = st.checkbox("Use existing scripts as examples", value=True)
+
+    # Generate button
+    if st.button("🚀 Generate Script", type="primary", disabled=not description):
+        if not description:
+            st.warning("Please enter a script description")
+            return
+
+        with st.spinner("Generating script... (this may take 30-60 seconds)"):
+            try:
+                from script_generator import generate_script, get_example_scripts
+
+                # Get examples if requested
+                examples = get_example_scripts(2) if use_examples else None
+
+                # Generate
+                result = generate_script(description, examples)
+
+                # Store in session state
+                st.session_state['generated_script'] = result
+
+                st.success("✅ Script generated successfully!")
+
+            except Exception as e:
+                st.error(f"Generation failed: {e}")
+                st.info("Check that ANTHROPIC_API_KEY is valid and you have API credits")
+                return
+
+    # Show preview if script generated
+    if 'generated_script' in st.session_state:
+        result = st.session_state['generated_script']
+
+        st.divider()
+        st.subheader("📄 Generated Script Preview")
+
+        # Metadata
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"**Filename:** `{result['filename']}`")
+        with col2:
+            if result['dependencies']:
+                st.info(f"**Dependencies:** {', '.join(result['dependencies'])}")
+            else:
+                st.info("**Dependencies:** None (uses stdlib only)")
+
+        # Code preview
+        st.code(result['code'], language='python', line_numbers=True)
+
+        # Usage instructions
+        with st.expander("📖 Usage Instructions"):
+            st.code(result['usage'], language='bash')
+
+        # Action buttons
+        st.divider()
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("✅ Add to Collection", type="primary"):
+                try:
+                    # Save script file
+                    script_path = Path(__file__).parent / result['filename']
+                    with open(script_path, 'w', encoding='utf-8') as f:
+                        f.write(result['code'])
+
+                    # Update requirements.txt
+                    if result['dependencies']:
+                        requirements_path = Path(__file__).parent / "requirements.txt"
+                        with open(requirements_path, 'r', encoding='utf-8') as f:
+                            existing = f.read()
+
+                        new_deps = []
+                        for dep in result['dependencies']:
+                            if dep not in existing:
+                                new_deps.append(dep)
+
+                        if new_deps:
+                            with open(requirements_path, 'a', encoding='utf-8') as f:
+                                f.write('\n' + '\n'.join(new_deps) + '\n')
+
+                    st.success(f"✅ Script added: {result['filename']}")
+
+                    if new_deps:
+                        st.info(f"📦 Added to requirements.txt: {', '.join(new_deps)}")
+                        st.warning("Run `pip install -r requirements.txt` to install new dependencies")
+
+                    st.info(f"🎯 Usage:\n```bash\n{result['usage']}\n```")
+
+                    # Clear session
+                    del st.session_state['generated_script']
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Failed to save: {e}")
+
+        with col2:
+            # Download button
+            st.download_button(
+                "💾 Download Script",
+                result['code'],
+                file_name=result['filename'],
+                mime='text/x-python'
+            )
+
+        with col3:
+            if st.button("🗑️ Discard"):
+                del st.session_state['generated_script']
+                st.rerun()
 
 
 if __name__ == "__main__":
