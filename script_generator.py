@@ -1,12 +1,11 @@
-# ABOUTME: Claude Agent SDK integration for generating new utility scripts
+# ABOUTME: AI-powered script generator using Anthropic API
 # ABOUTME: Generates scripts following project patterns with CLI args, error handling, type hints
 
-import asyncio
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
-from claude_agent_sdk import query, ClaudeAgentOptions
+from anthropic import Anthropic
 
 
 SYSTEM_PROMPT = """You are an expert Python developer creating utility scripts for a collection.
@@ -65,9 +64,9 @@ Generate ONLY the complete Python code. No explanations, no markdown blocks.
 Start with the ABOUTME comments."""
 
 
-async def generate_script_async(description: str, example_scripts: List[str] = None) -> Dict:
+def generate_script_sync(description: str, example_scripts: List[str] = None) -> Dict:
     """
-    Generate script using Claude Agent SDK.
+    Generate script using Anthropic API.
 
     Args:
         description: User description of desired script
@@ -102,24 +101,25 @@ OUTPUT FORMAT:
 Return ONLY valid Python code. No markdown, no explanations.
 Start with # ABOUTME comments."""
 
-    # Configure SDK options
+    # Initialize Anthropic client
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY not set")
 
-    options = ClaudeAgentOptions(
-        system_prompt={"type": "text", "text": SYSTEM_PROMPT},
+    client = Anthropic(api_key=api_key)
+
+    # Generate code
+    response = client.messages.create(
         model="claude-sonnet-4-20250514",
-        allowed_tools=["Read"],  # Allow reading example scripts
-        permission_mode="acceptEdits",
-        max_turns=5
+        max_tokens=4096,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
     )
 
-    # Query agent
-    generated_code = ""
-    async for message in query(prompt=prompt, options=options):
-        if hasattr(message, 'text'):
-            generated_code += message.text
+    # Extract text from response
+    generated_code = response.content[0].text
 
     # Extract code (remove any markdown if present)
     code = extract_code(generated_code)
@@ -235,7 +235,7 @@ def generate_usage_instructions(filename: str, code: str) -> str:
 
 def generate_script(description: str, example_scripts: List[str] = None) -> Dict:
     """
-    Synchronous wrapper for generate_script_async.
+    Generate script using Anthropic API.
 
     Args:
         description: User description of desired script
@@ -244,7 +244,7 @@ def generate_script(description: str, example_scripts: List[str] = None) -> Dict
     Returns:
         Dict with: code, filename, dependencies, usage
     """
-    return asyncio.run(generate_script_async(description, example_scripts))
+    return generate_script_sync(description, example_scripts)
 
 
 def get_example_scripts(limit: int = 2) -> List[str]:

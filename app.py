@@ -511,7 +511,7 @@ def meeting_notes_ui():
 
 def script_generator_ui():
     st.header("🤖 Script Generator")
-    st.markdown("Generate new utility scripts using Claude Agent SDK")
+    st.markdown("Generate new utility scripts using AI")
 
     # API Key management
     api_key_from_env = os.getenv("ANTHROPIC_API_KEY")
